@@ -18,6 +18,8 @@ import (
 	"context"
 	"flag"
 	"os"
+	"strconv"
+	"time"
 
 	"github.com/envoyproxy/go-control-plane/internal/example"
 	"github.com/envoyproxy/go-control-plane/pkg/cache/v3"
@@ -49,19 +51,25 @@ func main() {
 	// Create a cache
 	cache := cache.NewSnapshotCache(false, cache.IDHash{}, l)
 
-	// Create the snapshot that we'll serve to Envoy
-	snapshot := example.GenerateSnapshot()
-	if err := snapshot.Consistent(); err != nil {
-		l.Errorf("snapshot inconsistency: %+v\n%+v", snapshot, err)
-		os.Exit(1)
-	}
-	l.Debugf("will serve snapshot %+v", snapshot)
+	go func() {
+		for i := 1; i < 3; i++ {
+			version := i
+			// Create the snapshot that we'll serve to Envoy
+			snapshot := example.GenerateSnapshot(strconv.Itoa(version))
+			if err := snapshot.Consistent(); err != nil {
+				l.Errorf("snapshot inconsistency: %+v\n%+v", snapshot, err)
+				os.Exit(1)
+			}
+			l.Debugf("will serve snapshot %+v for version %d", snapshot, version)
 
-	// Add the snapshot to the cache
-	if err := cache.SetSnapshot(context.Background(), nodeID, snapshot); err != nil {
-		l.Errorf("snapshot error %q for %+v", err, snapshot)
-		os.Exit(1)
-	}
+			// Add the snapshot to the cache
+			if err := cache.SetSnapshot(context.Background(), nodeID, snapshot); err != nil {
+				l.Errorf("snapshot error %q for %+v", err, snapshot)
+				os.Exit(1)
+			}
+			time.Sleep(5 * time.Second)
+		}
+	}()
 
 	// Run the xDS server
 	ctx := context.Background()
